@@ -34,10 +34,11 @@ func (c *Client) SetFlag(ctx context.Context, tenantID, flagName string, value b
 func (c *Client) InvalidateFlags(ctx context.Context, tenantID string) error {
 	pattern := fmt.Sprintf("flags:%s:*", tenantID)
 	cmd := c.B().Scan().Cursor(0).Match(pattern).Count(200).Build()
-	_, keys, err := c.Do(ctx, cmd).AsScanEntry()
+	entry, err := c.Do(ctx, cmd).AsScanEntry()
 	if err != nil {
 		return err
 	}
+	keys := entry.Elements
 	if len(keys) == 0 {
 		return nil
 	}

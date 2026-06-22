@@ -21,7 +21,7 @@ func Logger(log *slog.Logger) fiber.Handler {
 		requestID := core.RequestIDFromCtx(c.UserContext())
 		tenantID := ""
 		if t := tenant.FromCtx(c.UserContext()); t != nil {
-			tenantID = t.ID
+			tenantID = t.ID.String()
 		}
 
 		attrs := []slog.Attr{

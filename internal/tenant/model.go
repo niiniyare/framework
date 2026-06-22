@@ -1,44 +1,51 @@
 // Package tenant manages the tenant lifecycle and per-tenant resource registry.
 package tenant
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Plan is a tenant's subscription tier.
 type Plan string
 
 const (
-	PlanStarter    Plan = "starter"
-	PlanPro        Plan = "pro"
-	PlanEnterprise Plan = "enterprise"
+	PlanBasic        Plan = "Basic"
+	PlanProfessional Plan = "Professional"
+	PlanEnterprise   Plan = "Enterprise"
 )
 
 // Status is the operational state of a tenant.
 type Status string
 
 const (
-	StatusActive        Status = "active"
-	StatusSuspended     Status = "suspended"
-	StatusTrial         Status = "trial"
-	StatusDecommissioned Status = "decommissioned"
+	StatusPending    Status = "PENDING"
+	StatusActive     Status = "ACTIVE"
+	StatusSuspended  Status = "SUSPENDED"
+	StatusArchived   Status = "ARCHIVED"
 )
 
 // Tenant holds the resolved, in-memory representation of a tenant.
-// It is loaded from the database and cached in Redis.
 type Tenant struct {
-	ID           string
+	ID           uuid.UUID
 	Slug         string
 	Name         string
-	Plan         Plan
+	Email        string
+	Subdomain    string
 	Status       Status
+	Plan         Plan
 	SchemaName   string // PostgreSQL schema: "tenant_<slug>"
+	CurrencyCode string
+	Timezone     string
 	FeatureFlags map[string]bool
 	CreatedAt    time.Time
-	SuspendedAt  *time.Time
+	UpdatedAt    time.Time
 }
 
 // IsActive returns true if the tenant can serve requests.
 func (t *Tenant) IsActive() bool {
-	return t.Status == StatusActive || t.Status == StatusTrial
+	return t.Status == StatusActive
 }
 
 // MaxDBConns returns the connection pool ceiling for this tenant's plan.
@@ -46,7 +53,7 @@ func (t *Tenant) MaxDBConns() int32 {
 	switch t.Plan {
 	case PlanEnterprise:
 		return 50
-	case PlanPro:
+	case PlanProfessional:
 		return 20
 	default:
 		return 5

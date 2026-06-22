@@ -8,10 +8,10 @@ type FieldOption func(*FieldOptions)
 type FieldOptions struct {
 	Required     bool
 	Unique       bool
-	Immutable    bool   // set on create, rejected on update
-	Sensitive    bool   // excluded from logs and API responses by default
-	Translatable bool   // value stored with locale key
-	ReadOnly     bool   // never accepted in write payloads
+	Immutable    bool // set on create, rejected on update
+	Sensitive    bool // excluded from logs and API responses by default
+	Translatable bool // value stored with locale key
+	ReadOnly     bool // never accepted in write payloads
 
 	Default any    // static value; use DefaultFn for computed defaults
 	MaxLen  int    // for Data, SmallText

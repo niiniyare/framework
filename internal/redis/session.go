@@ -57,11 +57,11 @@ func (c *Client) DeleteSession(ctx context.Context, tenantID, sessionID string) 
 func (c *Client) DeleteAllSessions(ctx context.Context, tenantID, userID string) error {
 	pattern := fmt.Sprintf("session:%s:*", tenantID)
 	cmd := c.B().Scan().Cursor(0).Match(pattern).Count(100).Build()
-	cursor, keys, err := c.Do(ctx, cmd).AsScanEntry()
+	entry, err := c.Do(ctx, cmd).AsScanEntry()
 	if err != nil {
 		return fmt.Errorf("session scan: %w", err)
 	}
-	_ = cursor // TODO: paginate for large sets
+	keys := entry.Elements
 
 	toDelete := make([]string, 0, len(keys))
 	for _, k := range keys {

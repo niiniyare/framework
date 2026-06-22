@@ -8,13 +8,16 @@ import (
 
 	"awo.so/framework/internal/core"
 	internalHooks "awo.so/framework/internal/hooks"
-	internalPerms "awo.so/framework/internal/permissions"
 	"awo.so/framework/internal/middleware"
+	internalPerms "awo.so/framework/internal/permissions"
+	"awo.so/framework/internal/sdui"
 	"awo.so/framework/internal/store"
 	"awo.so/framework/internal/tenant"
+	"awo.so/framework/internal/workflow"
 	"awo.so/framework/pkg/filter"
 	"awo.so/framework/pkg/hooks"
 	"awo.so/framework/pkg/permissions"
+	wftypes "awo.so/framework/pkg/workflow"
 )
 
 // Deps holds the dependencies injected into every handler.
@@ -23,6 +26,8 @@ type Deps struct {
 	TenantRegistry *tenant.Registry
 	HookExecutor   *internalHooks.Executor
 	Evaluator      *internalPerms.Evaluator
+	Dispatcher     *workflow.Dispatcher // may be nil when Temporal is not configured
+	PageBuilder    *sdui.CachedBuilder  // may be nil when Redis is not configured
 	RepoFor        func(t *tenant.Tenant) store.EntityRepository
 	Log            *slog.Logger
 }
@@ -39,7 +44,7 @@ func resolve(c *fiber.Ctx, d *Deps) (*core.EntityDefinition, *tenant.Tenant, *pe
 	}
 
 	entityName := c.Params("entity")
-	entry, err := d.TenantRegistry.GetOrLoad(t.ID, func() (*tenant.Entry, error) {
+	entry, err := d.TenantRegistry.GetOrLoad(t.ID.String(), func() (*tenant.Entry, error) {
 		return &tenant.Entry{Tenant: t, Registry: core.NewEntityRegistry()}, nil
 	})
 	if err != nil {
@@ -144,9 +149,14 @@ func HandleCreate(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 
-		// after_save hook (inside logical transaction — errors should not occur here in practice)
+		// after_save hook
 		if err := d.HookExecutor.Run(c.UserContext(), def, hooks.AfterSave, record, nil, data, principal, repo); err != nil {
 			d.Log.Error("after_save hook failed", slog.String("entity", def.Name), slog.Any("err", err))
+		}
+
+		// Workflow dispatch (non-blocking)
+		if d.Dispatcher != nil {
+			d.Dispatcher.DispatchAll(c.UserContext(), def, wftypes.TriggerAfterSave, record)
 		}
 
 		return okCreated(c, record)
@@ -196,6 +206,10 @@ func HandleUpdate(d *Deps) fiber.Handler {
 
 		if err := d.HookExecutor.Run(c.UserContext(), def, hooks.AfterSave, record, existing, data, principal, repo); err != nil {
 			d.Log.Error("after_save hook failed", slog.String("entity", def.Name), slog.Any("err", err))
+		}
+
+		if d.Dispatcher != nil {
+			d.Dispatcher.DispatchAll(c.UserContext(), def, wftypes.TriggerAfterSave, record)
 		}
 
 		return ok(c, record)
@@ -267,6 +281,11 @@ func HandleSubmit(d *Deps) fiber.Handler {
 		if err != nil {
 			return errInternal(c)
 		}
+
+		if d.Dispatcher != nil {
+			d.Dispatcher.DispatchAll(c.UserContext(), def, wftypes.TriggerOnSubmit, record)
+		}
+
 		return ok(c, record)
 	}
 }
@@ -304,6 +323,41 @@ func HandleCancel(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 		return ok(c, record)
+	}
+}
+
+// HandlePage handles GET /api/:entity/__page — returns amis page JSON.
+func HandlePage(d *Deps) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		def, t, principal, handlerErr := resolve(c, d)
+		if handlerErr != nil {
+			return handlerErr
+		}
+		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionRead, nil); err != nil {
+			return errForbidden(c, err.Error())
+		}
+
+		role := "default"
+		if len(principal.Roles) > 0 {
+			role = principal.Roles[0]
+		}
+
+		if d.PageBuilder != nil {
+			page, err := d.PageBuilder.GetOrBuild(c.UserContext(), t.ID.String(), def, role)
+			if err != nil {
+				return errInternal(c)
+			}
+			c.Set("Content-Type", "application/json")
+			return c.Send(page)
+		}
+
+		// No Redis — build uncached.
+		page, err := sdui.BuildPage(def)
+		if err != nil {
+			return errInternal(c)
+		}
+		c.Set("Content-Type", "application/json")
+		return c.Send(page)
 	}
 }
 

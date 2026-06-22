@@ -39,13 +39,17 @@ func Tenant(resolver TenantResolver) fiber.Handler {
 		}
 
 		if !t.IsActive() {
-			if t.Status == tenant.StatusSuspended {
+			switch t.Status {
+			case tenant.StatusSuspended:
 				return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
 					"error":  "tenant suspended",
 					"status": t.Status,
 				})
+			case tenant.StatusArchived:
+				return c.Status(fiber.StatusGone).JSON(fiber.Map{"error": "tenant archived"})
+			default:
+				return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{"error": "tenant unavailable"})
 			}
-			return c.Status(fiber.StatusGone).JSON(fiber.Map{"error": "tenant decommissioned"})
 		}
 
 		goCtx := tenant.WithTenant(c.UserContext(), t)

@@ -18,6 +18,9 @@ func RegisterRoutes(app *fiber.App, d *Deps) {
 	api.Post("/:entity/:id/submit", HandleSubmit(d))
 	api.Post("/:entity/:id/cancel", HandleCancel(d))
 
+	// SDUI page definition endpoint — returns amis JSON for the entity.
+	api.Get("/:entity/__page", HandlePage(d))
+
 	// Health endpoints — no tenant/auth required.
 	app.Get("/health/live", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})

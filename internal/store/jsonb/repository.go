@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,17 +35,6 @@ type Repository struct {
 // New creates a JSONB repository scoped to the given tenant.
 func New(pool *pgxpool.Pool, tenantID string) *Repository {
 	return &Repository{pool: pool, tenantID: tenantID}
-}
-
-// querier abstracts pgxpool.Pool and pgx.Tx so WithTx can pass either.
-type querier interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
-	Exec(ctx context.Context, sql string, args ...any) (interface{ RowsAffected() int64 }, error)
-}
-
-func (r *Repository) querier() querier {
-	return r.pool
 }
 
 // FindByID implements store.EntityRepository.
@@ -368,13 +356,3 @@ var _ store.EntityRepository = (*txRepository)(nil)
 
 // Ensure Repository satisfies the interface at compile time.
 var _ store.EntityRepository = (*Repository)(nil)
-
-// pgxExecResult adapts pgconn.CommandTag to the querier interface.
-// pgx.Tx.Exec already returns pgconn.CommandTag which has RowsAffected().
-// This is here to silence the interface mismatch for pool.Exec.
-type pgxExecResult struct{ n int64 }
-
-func (p pgxExecResult) RowsAffected() int64 { return p.n }
-
-// strings is used in the filter translation — keep the import.
-var _ = strings.Contains

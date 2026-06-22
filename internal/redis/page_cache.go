@@ -33,10 +33,11 @@ func (c *Client) InvalidatePage(ctx context.Context, tenantID, entityName, role 
 func (c *Client) InvalidateEntityPages(ctx context.Context, tenantID, entityName string) error {
 	pattern := fmt.Sprintf("sdui:%s:%s:*", tenantID, entityName)
 	cmd := c.B().Scan().Cursor(0).Match(pattern).Count(100).Build()
-	_, keys, err := c.Do(ctx, cmd).AsScanEntry()
+	entry, err := c.Do(ctx, cmd).AsScanEntry()
 	if err != nil {
 		return err
 	}
+	keys := entry.Elements
 	if len(keys) == 0 {
 		return nil
 	}

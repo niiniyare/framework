@@ -7,17 +7,17 @@ type FieldType string
 
 const (
 	// Scalar types
-	Data     FieldType = "Data"     // UTF-8 string, configurable max length
+	Data      FieldType = "Data"      // UTF-8 string, configurable max length
 	SmallText FieldType = "SmallText" // Unindexed, up to 1024 chars
 	LongText  FieldType = "LongText"  // Unbounded text
-	Int      FieldType = "Int"      // 64-bit signed integer
-	Float    FieldType = "Float"    // 64-bit IEEE 754
-	Currency FieldType = "Currency" // numeric(20,4) — never floating point
-	Bool     FieldType = "Bool"     // boolean, never nullable
-	Date     FieldType = "Date"     // calendar date, no timezone
-	DateTime FieldType = "DateTime" // timestamp with timezone, stored as UTC
-	Time     FieldType = "Time"     // time of day
-	UUID     FieldType = "UUID"     // uuid column, auto-generated default
+	Int       FieldType = "Int"       // 64-bit signed integer
+	Float     FieldType = "Float"     // 64-bit IEEE 754
+	Currency  FieldType = "Currency"  // numeric(20,4) — never floating point
+	Bool      FieldType = "Bool"      // boolean, never nullable
+	Date      FieldType = "Date"      // calendar date, no timezone
+	DateTime  FieldType = "DateTime"  // timestamp with timezone, stored as UTC
+	Time      FieldType = "Time"      // time of day
+	UUID      FieldType = "UUID"      // uuid column, auto-generated default
 
 	// Structured types
 	Select      FieldType = "Select"      // single value from declared option set

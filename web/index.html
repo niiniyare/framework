@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="system">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>AWO ERP</title>
+  <link rel="stylesheet" href="/sdk/sdk.css">
+  <link rel="stylesheet" href="/sdk/helper.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="/sdk/iconfont.css">
+  <style>
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-content">
+          <div class="brand-icon">A</div>
+          <span class="brand-text">AWO ERP</span>
+        </div>
+        <button class="sidebar-toggle" aria-label="Toggle sidebar" onclick="toggleSidebar()">
+          <i class="fa fa-bars"></i>
+        </button>
+      </div>
+
+      <div class="sidebar-search">
+        <div class="search-box">
+          <i class="fa fa-search"></i>
+          <span>Search tools</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-menu" id="sidebarMenu"></nav>
+    </aside>
+
+    <!-- Backdrop for mobile -->
+    <div id="sidebar-backdrop" onclick="closeSidebarMobile()"></div>
+
+    <!-- Main Content Area -->
+    <div id="main">
+      <div id="topbar">
+        <button class="topbar-toggle" aria-label="Open menu" onclick="openSidebarMobile()">
+          <i class="fa fa-bars"></i>
+        </button>
+        <div class="topbar-brand">
+          <div class="brand-icon">A</div>
+          <span>AWO ERP</span>
+        </div>
+        <div class="breadcrumb" id="breadcrumb">
+          <span class="bc-current">Dashboard</span>
+        </div>
+        <div class="topbar-spacer"></div>
+        <button class="theme-toggle" aria-label="Toggle theme" onclick="cycleTheme()">
+          <i class="fa fa-circle-half-stroke" id="themeIcon"></i>
+          <span class="theme-label" id="themeLabel">System</span>
+        </button>
+      </div>
+
+      <div id="content">
+        <div class="loading">Loading...</div>
+      </div>
+
+      <div id="footer">
+        <span>&copy; 2026 AWO ERP &middot; <a href="#settings">Settings</a></span>
+      </div>
+    </div>
+  </div>
+
+  <script src="/sdk/sdk.js"></script>
+  <script src="/sdk/charts.js"></script>
+  <script src="/sdk/rest.js"></script>
+  <script src="/utils/locale-en.js"></script>
+  <script src="/utils/schema-loader.js"></script>
+  <script>
+    (function () {
+      var API_BASE = '/';
+
+      var amis = amisRequire('amis/embed');
+      var loader = new SchemaLoader('/schemas/');
+      var currentInstance = null;
+
+
+      // TODO: nake it dynamic ── Menu Structure ──
+      var menuConfig = [
+        {
+          type: 'item',
+          id: 'dashboard',
+          label: 'Dashboard',
+          icon: 'fa-chart-line',
+          hash: '#dashboard'
+        },
+        {
+          type: 'group',
+          id: 'basic-info',
+          label: 'Basic Information',
+          icon: 'fa-briefcase',
+          expanded: false,
+          items: [
+            {id: 'users', label: 'Users', hash: '#users'},
+            {id: 'table', label: 'Table', hash: '#table'},
+            {id: 'organizations', label: 'Tenants', hash: '#organizations'},
+            {id: 'settings', label: 'Settings', hash: '#settings'}
+          ]
+        },
+        {
+          type: 'group',
+          id: 'inventory',
+          label: 'Inventory',
+          icon: 'fa-warehouse',
+          expanded: false,
+          items: [
+            {id: 'products', label: 'Products', hash: '#products'}
+          ]
+        }
+      ];
+
+      // ── AMIS Environment ──
+      var amisEnv = {
+        locale: 'en-US',
+
+        fetcher: function (api) {
+          var url = api.url;
+          if (url && !/^https?:\/\//.test(url)) {
+            // Strip leading slash to avoid double-slash with API_BASE
+            url = API_BASE + url.replace(/^\//, '');
+          }
+
+          // Convert AMIS pagination (page/perPage) to backend (offset/limit)
+          var urlObj = new URL(url, window.location.origin);
+          var page = urlObj.searchParams.get('page');
+          var perPage = urlObj.searchParams.get('perPage');
+          if (page !== null) {
+            var limit = perPage ? parseInt(perPage) : 20;
+            urlObj.searchParams.delete('page');
+            urlObj.searchParams.set('offset', String((parseInt(page) - 1) * limit));
+          }
+          if (perPage !== null) {
+            urlObj.searchParams.delete('perPage');
+            urlObj.searchParams.set('limit', perPage);
+          }
+          url = urlObj.toString();
+
+          var method = (api.method || 'get').toLowerCase();
+          var headers = Object.assign({'Content-Type': 'application/json'}, api.headers || {});
+          var opts = {method: method, headers: headers};
+
+          if (method !== 'get' && method !== 'head' && api.data) {
+            opts.body = JSON.stringify(api.data);
+          }
+
+          return fetch(url, opts)
+            .then(function (res) {
+              // 204 No Content (DELETE success) — no body to parse
+              if (res.status === 204) {
+                return {status: 0, msg: ''};
+              }
+              if (!res.ok) {
+                // Try to parse error body for backend message
+                return res.json().catch(function () { return {}; }).then(function (body) {
+                  var msg = body.message || body.msg || res.statusText || 'Request failed';
+                  console.error('[fetcher] HTTP', res.status, msg, url);
+                  return {status: res.status, msg: msg};
+                });
+              }
+              return res.json();
+            })
+            .then(function (json) {
+              // Already an AMIS response (from error handling above or passthrough)
+              if (json.status !== undefined && json.success === undefined) {
+                return json;
+              }
+              // Backend envelope: {success, data, meta}
+              if (json.success !== undefined) {
+                if (!json.success) {
+                  return {status: 1, msg: json.message || 'Request failed'};
+                }
+                // List response with pagination
+                if (Array.isArray(json.data) && json.meta && json.meta.pagination) {
+                  return {
+                    status: 0,
+                    data: {
+                      items: json.data,
+                      options: json.data,
+                      count: json.meta.pagination.total_records
+                    }
+                  };
+                }
+                // Single item or action response
+                return {status: 0, data: json.data, msg: ''};
+              }
+              return json;
+            })
+            .catch(function (err) {
+              console.error('[fetcher] Network error:', err.message, '| URL:', url);
+              return {status: 1, msg: 'Network error: ' + err.message};
+            });
+        },
+        isCancel: function () {return false;},
+        notify: function (type, msg) {
+          console.log('[' + type + ']', msg);
+        },
+        alert: function (msg) {
+          alert(msg);
+        },
+        copy: function (text) {
+          if (navigator.clipboard) navigator.clipboard.writeText(text);
+        }
+      };
+
+  </script>
+</body>
+
+</html>

@@ -30,8 +30,8 @@ const (
 type Condition struct {
 	Field    string
 	Op       Operator
-	Value    any      // nil for IsNull / IsNotNull
-	JSONPath string   // non-empty for JSONB field access (custom entity fields)
+	Value    any    // nil for IsNull / IsNotNull
+	JSONPath string // non-empty for JSONB field access (custom entity fields)
 }
 
 // LogicalOp combines conditions.

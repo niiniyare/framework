@@ -31,7 +31,7 @@ func Auth(sessions SessionStore) fiber.Handler {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 		}
 
-		principal, err := sessions.GetSession(c.UserContext(), t.ID, sessionID)
+		principal, err := sessions.GetSession(c.UserContext(), t.ID.String(), sessionID)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "unauthorized"})
 		}
