@@ -1,11 +1,13 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 
 	"github.com/gofiber/fiber/v2"
 
+	"awo.so/framework/internal/authz"
 	"awo.so/framework/internal/core"
 	internalHooks "awo.so/framework/internal/hooks"
 	"awo.so/framework/internal/middleware"
@@ -26,10 +28,53 @@ type Deps struct {
 	TenantRegistry *tenant.Registry
 	HookExecutor   *internalHooks.Executor
 	Evaluator      *internalPerms.Evaluator
+	Authz          *authz.Service     // may be nil when DB is not configured; used for Casbin RBAC
 	Dispatcher     *workflow.Dispatcher // may be nil when Temporal is not configured
 	PageBuilder    *sdui.CachedBuilder  // may be nil when Redis is not configured
 	RepoFor        func(t *tenant.Tenant) store.EntityRepository
 	Log            *slog.Logger
+}
+
+// checkAccess enforces RBAC for (principal, entity, action).
+// When Authz (Casbin) is available it is the authoritative check.
+// Superusers bypass Casbin but not privacy policies.
+// Falls back to Evaluator (entity-declared permissions) when Authz is nil.
+func checkAccess(
+	ctx context.Context,
+	d *Deps,
+	def *core.EntityDefinition,
+	principal *permissions.Principal,
+	action permissions.Action,
+	record *core.EntityRecord,
+) error {
+	if principal.IsSuper {
+		return nil
+	}
+
+	if d.Authz != nil {
+		subject := authz.TenantSubject(principal.UserID)
+		domain := authz.TenantDomain(principal.TenantID)
+		ok, err := d.Authz.Enforce(ctx, authz.Request{
+			Subject: subject,
+			Domain:  domain,
+			Object:  def.Name,
+			Action:  string(action),
+		})
+		if err != nil {
+			return internalPerms.ErrForbidden
+		}
+		if !ok {
+			return &internalPerms.ForbiddenError{
+				EntityName: def.Name,
+				Action:     action,
+				Reason:     "casbin: access denied",
+			}
+		}
+		return nil
+	}
+
+	// Casbin not available — fall back to entity-declared permissions.
+	return d.Evaluator.Check(ctx, def, principal, action, record)
 }
 
 // resolve looks up the EntityDefinition for the entity named in the URL parameter.
@@ -66,7 +111,7 @@ func HandleList(d *Deps) fiber.Handler {
 			return handlerErr
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionRead, nil); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionRead, nil); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -103,7 +148,7 @@ func HandleGet(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionRead, record); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionRead, record); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -119,7 +164,7 @@ func HandleCreate(d *Deps) fiber.Handler {
 			return handlerErr
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionCreate, nil); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionCreate, nil); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -180,7 +225,7 @@ func HandleUpdate(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionUpdate, existing); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionUpdate, existing); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -233,7 +278,7 @@ func HandleDelete(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionDelete, existing); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionDelete, existing); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -269,7 +314,7 @@ func HandleSubmit(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionSubmit, existing); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionSubmit, existing); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -310,7 +355,7 @@ func HandleCancel(d *Deps) fiber.Handler {
 			return errInternal(c)
 		}
 
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionCancel, existing); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionCancel, existing); err != nil {
 			return errForbidden(c, err.Error())
 		}
 
@@ -333,7 +378,7 @@ func HandlePage(d *Deps) fiber.Handler {
 		if handlerErr != nil {
 			return handlerErr
 		}
-		if err := d.Evaluator.Check(c.UserContext(), def, principal, permissions.ActionRead, nil); err != nil {
+		if err := checkAccess(c.UserContext(), d, def, principal, permissions.ActionRead, nil); err != nil {
 			return errForbidden(c, err.Error())
 		}
 

@@ -17,6 +17,8 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	AllowOrigins string // comma-separated list for CORS
+	WebDir       string // path to built web assets (dist); empty = no static serving
+	WebPublicDir string // path to Vite public/ dir; merged alongside WebDir (dev mode)
 }
 
 // DefaultConfig returns a sensible default server config.
@@ -26,6 +28,7 @@ func DefaultConfig() Config {
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		AllowOrigins: "*",
+		WebDir:       "./web/dist",
 	}
 }
 
@@ -46,10 +49,19 @@ func New(cfg Config, deps *Deps, tenantResolver middleware.TenantResolver, sessi
 	app.Use(middleware.RequestID())
 	app.Use(middleware.Logger(log))
 	app.Use(cors.New(cors.Config{AllowOrigins: cfg.AllowOrigins}))
-	app.Use(middleware.Tenant(tenantResolver))
-	app.Use(middleware.Auth(sessions))
+
+	// Tenant + Auth middleware only applies to API surface.
+	// Static file paths (/schemas/, /, etc.) must reach the static handler.
+	for _, prefix := range []string{"/api", "/iam", "/auth"} {
+		app.Use(prefix, middleware.Tenant(tenantResolver))
+		app.Use(prefix, middleware.Auth(sessions))
+	}
 
 	RegisterRoutes(app, deps)
+
+	if cfg.WebDir != "" {
+		MountStatic(app, cfg.WebDir, cfg.WebPublicDir)
+	}
 
 	return app
 }

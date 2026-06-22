@@ -1,0 +1,85 @@
+# Awo Framework configuration
+# Pass to any command with: --config awo.yaml
+# All values here are defaults; environment variables and CLI flags take precedence.
+
+env: development           # development | staging | production
+log_level: info            # debug | info | warn | error
+
+# ── HTTP server ───────────────────────────────────────────────────────────────
+server:
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  allow_origins: "*"       # comma-separated CORS origins; tighten in production
+
+# ── Database ──────────────────────────────────────────────────────────────────
+database:
+  url: ""                  # overrides DATABASE_URL env var
+  # Example: postgres://awo:secret@localhost:5432/awo?sslmode=disable
+  max_conns: 10            # per-tenant pool max connections
+  pool_timeout: 5s
+
+# ── Redis ─────────────────────────────────────────────────────────────────────
+redis:
+  addr: "127.0.0.1:6379"  # overrides REDIS_URL env var
+  password: ""
+  db: 0
+
+# ── Temporal ──────────────────────────────────────────────────────────────────
+temporal:
+  host_port: "localhost:7233"   # overrides TEMPORAL_HOST_PORT env var
+  namespace: "default"
+  task_queue: "awo"
+
+# ── IAM ───────────────────────────────────────────────────────────────────────
+iam:
+  session_ttl_hours: 8          # how long a full session lives
+  mfa_pending_ttl_minutes: 5    # how long a pending MFA token is valid
+  api_key_cache_ttl_minutes: 5  # Redis TTL for validated API key sessions
+  max_failed_logins: 5          # failed attempts before account lock
+  lock_duration_minutes: 15     # how long account stays locked
+
+# ── Authorization ─────────────────────────────────────────────────────────────
+authz:
+  policy_cache_ttl: 5m          # Casbin SyncedEnforcer refresh interval
+
+# ── Settings ──────────────────────────────────────────────────────────────────
+settings:
+  cache_ttl: 10m                # tenant settings Redis cache TTL
+
+# ── Feature flags ─────────────────────────────────────────────────────────────
+feature_flags:
+  cache_ttl: 5m                 # tenant flags Redis cache TTL
+
+# ── SDUI ──────────────────────────────────────────────────────────────────────
+sdui:
+  page_cache_ttl: 24h           # generated amis page JSON cache TTL
+
+# ── Tenant defaults ───────────────────────────────────────────────────────────
+tenant:
+  default_currency: "KES"
+  default_timezone: "Africa/Nairobi"
+  default_plan: "Basic"         # Basic | Professional | Enterprise
+  default_modules:
+    - finance
+
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+rate_limit:
+  enabled: true
+  requests_per_minute: 300      # per (tenantID, principalID) sliding window
+  burst: 50
+
+# ── Audit ─────────────────────────────────────────────────────────────────────
+audit:
+  enabled: true
+  domain_events_enabled: true   # write to domain_events outbox for async delivery
+
+# ── Modules ───────────────────────────────────────────────────────────────────
+# List of modules compiled into this build. All are registered by default.
+modules:
+  - platform
+  - finance
+  - inventory
+  - hr
+  - crm
+  - forecourt

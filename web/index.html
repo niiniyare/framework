@@ -6,213 +6,493 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>AWO ERP</title>
-  <link rel="stylesheet" href="/sdk/sdk.css">
-  <link rel="stylesheet" href="/sdk/helper.css">
+  <link rel="stylesheet" href="https://unpkg.com/amis@6.7.0/sdk/sdk.css">
+  <link rel="stylesheet" href="https://unpkg.com/amis@6.7.0/sdk/helper.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="/sdk/iconfont.css">
+  <link rel="stylesheet" href="https://unpkg.com/amis@6.7.0/sdk/iconfont.css">
   <style>
+    :root {
+      --sidebar-w: 240px;
+      --topbar-h: 52px;
+      --brand: #1e40af;
+      --brand-dark: #1e3a8a;
+      --sidebar-bg: #0f172a;
+      --sidebar-text: #cbd5e1;
+      --sidebar-hover: #1e293b;
+      --sidebar-active-bg: #1e40af;
+      --sidebar-active-text: #fff;
+      --sidebar-group: #64748b;
+      --topbar-bg: #fff;
+      --topbar-border: #e2e8f0;
+      --content-bg: #f8fafc;
+      --footer-text: #94a3b8;
+    }
+
+    [data-theme="dark"] {
+      --topbar-bg: #1e293b;
+      --topbar-border: #334155;
+      --content-bg: #0f172a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    #app { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--sidebar-bg);
+      color: var(--sidebar-text);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width .2s ease, min-width .2s ease;
+      z-index: 50;
+    }
+
+    #sidebar.collapsed { width: 56px; min-width: 56px; }
+
+    .sidebar-brand {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      height: var(--topbar-h);
+      border-bottom: 1px solid #1e293b;
+      flex-shrink: 0;
+    }
+
+    .brand-content { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+    .brand-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--brand); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 16px; flex-shrink: 0;
+    }
+    .brand-text { font-weight: 700; font-size: 15px; color: #f1f5f9; white-space: nowrap; overflow: hidden; }
+    #sidebar.collapsed .brand-text { display: none; }
+
+    .sidebar-toggle {
+      background: none; border: none; color: var(--sidebar-group);
+      cursor: pointer; padding: 6px; border-radius: 6px; flex-shrink: 0;
+      font-size: 14px;
+    }
+    .sidebar-toggle:hover { background: var(--sidebar-hover); color: #fff; }
+
+    .sidebar-menu {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 8px 0;
+    }
+    .sidebar-menu::-webkit-scrollbar { width: 4px; }
+    .sidebar-menu::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+    .nav-group-label {
+      padding: 12px 16px 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--sidebar-group);
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    #sidebar.collapsed .nav-group-label { visibility: hidden; }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      cursor: pointer;
+      border-radius: 0;
+      color: var(--sidebar-text);
+      text-decoration: none;
+      font-size: 13.5px;
+      transition: background .15s;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .nav-item:hover { background: var(--sidebar-hover); color: #f1f5f9; }
+    .nav-item.active { background: var(--sidebar-active-bg); color: var(--sidebar-active-text); }
+    .nav-item i { width: 18px; text-align: center; font-size: 13px; flex-shrink: 0; }
+    .nav-item span { overflow: hidden; text-overflow: ellipsis; }
+    #sidebar.collapsed .nav-item span { display: none; }
+
+    /* ── Main ────────────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--content-bg);
+    }
+
+    #topbar {
+      height: var(--topbar-h);
+      background: var(--topbar-bg);
+      border-bottom: 1px solid var(--topbar-border);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 40;
+    }
+
+    .topbar-toggle {
+      display: none;
+      background: none; border: none; cursor: pointer;
+      font-size: 16px; color: #64748b; padding: 6px;
+    }
+
+    .breadcrumb { font-size: 13px; color: #64748b; display: flex; align-items: center; gap: 6px; }
+    .bc-sep { color: #cbd5e1; }
+    .bc-current { color: #1e293b; font-weight: 500; }
+
+    .topbar-spacer { flex: 1; }
+
+    .topbar-right { display: flex; align-items: center; gap: 8px; }
+
+    .user-badge {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 10px; border-radius: 20px;
+      background: #f1f5f9; font-size: 13px; color: #475569;
+    }
+    .user-badge i { color: #94a3b8; }
+
+    .theme-btn {
+      background: none; border: 1px solid #e2e8f0;
+      border-radius: 6px; padding: 5px 10px;
+      cursor: pointer; font-size: 12px; color: #64748b;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .theme-btn:hover { background: #f1f5f9; }
+
+    #content {
+      flex: 1;
+      overflow: auto;
+      padding: 20px;
+      isolation: isolate;
+    }
+
+    .page-loading {
+      display: flex; align-items: center; justify-content: center;
+      height: 100%; color: #94a3b8; font-size: 14px; gap: 10px;
+    }
+
+    .page-error {
+      margin: 40px auto; max-width: 480px; padding: 24px;
+      background: #fef2f2; border: 1px solid #fecaca;
+      border-radius: 8px; color: #b91c1c; font-size: 14px;
+    }
+    .page-error h3 { margin-bottom: 8px; }
+
+    #footer {
+      padding: 8px 20px;
+      font-size: 12px;
+      color: var(--footer-text);
+      border-top: 1px solid var(--topbar-border);
+      background: var(--topbar-bg);
+      flex-shrink: 0;
+    }
+
+    /* ── Mobile ──────────────────────────────────────────────────────── */
+    #sidebar-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 190;
+    }
+
+    @media (max-width: 768px) {
+      #sidebar {
+        position: fixed; top: 0; left: 0; bottom: 0;
+        transform: translateX(-100%); transition: transform .25s ease;
+        z-index: 200;
+      }
+      #sidebar.mobile-open { transform: translateX(0); width: var(--sidebar-w) !important; min-width: var(--sidebar-w) !important; }
+      #sidebar-backdrop.visible { display: block; }
+      .topbar-toggle { display: flex; }
+      #main { width: 100%; }
+      .brand-text { display: block !important; }
+      .nav-item span { display: inline !important; }
+    }
   </style>
 </head>
 
 <body>
   <div id="app">
-    <!-- Sidebar -->
     <aside id="sidebar">
       <div class="sidebar-brand">
         <div class="brand-content">
           <div class="brand-icon">A</div>
           <span class="brand-text">AWO ERP</span>
         </div>
-        <button class="sidebar-toggle" aria-label="Toggle sidebar" onclick="toggleSidebar()">
+        <button class="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar">
           <i class="fa fa-bars"></i>
         </button>
       </div>
-
-      <div class="sidebar-search">
-        <div class="search-box">
-          <i class="fa fa-search"></i>
-          <span>Search tools</span>
-        </div>
-      </div>
-
       <nav class="sidebar-menu" id="sidebarMenu"></nav>
     </aside>
 
-    <!-- Backdrop for mobile -->
-    <div id="sidebar-backdrop" onclick="closeSidebarMobile()"></div>
+    <div id="sidebar-backdrop" onclick="closeMobile()"></div>
 
-    <!-- Main Content Area -->
     <div id="main">
       <div id="topbar">
-        <button class="topbar-toggle" aria-label="Open menu" onclick="openSidebarMobile()">
-          <i class="fa fa-bars"></i>
-        </button>
-        <div class="topbar-brand">
-          <div class="brand-icon">A</div>
-          <span>AWO ERP</span>
-        </div>
-        <div class="breadcrumb" id="breadcrumb">
-          <span class="bc-current">Dashboard</span>
+        <button class="topbar-toggle" onclick="openMobile()"><i class="fa fa-bars"></i></button>
+        <div class="breadcrumb">
+          <span id="bc-module"></span>
+          <span class="bc-sep" id="bc-sep" style="display:none">›</span>
+          <span class="bc-current" id="bc-page">Dashboard</span>
         </div>
         <div class="topbar-spacer"></div>
-        <button class="theme-toggle" aria-label="Toggle theme" onclick="cycleTheme()">
-          <i class="fa fa-circle-half-stroke" id="themeIcon"></i>
-          <span class="theme-label" id="themeLabel">System</span>
-        </button>
+        <div class="topbar-right">
+          <div class="user-badge" id="userBadge">
+            <i class="fa fa-circle-user"></i>
+            <span id="userName">—</span>
+          </div>
+          <button class="theme-btn" onclick="cycleTheme()">
+            <i class="fa fa-circle-half-stroke" id="themeIcon"></i>
+            <span id="themeLabel">System</span>
+          </button>
+        </div>
       </div>
 
       <div id="content">
-        <div class="loading">Loading...</div>
+        <div class="page-loading"><i class="fa fa-spinner fa-spin"></i> Loading...</div>
       </div>
 
-      <div id="footer">
-        <span>&copy; 2026 AWO ERP &middot; <a href="#settings">Settings</a></span>
-      </div>
+      <div id="footer">&copy; 2026 AWO ERP</div>
     </div>
   </div>
 
-  <script src="/sdk/sdk.js"></script>
-  <script src="/sdk/charts.js"></script>
-  <script src="/sdk/rest.js"></script>
-  <script src="/utils/locale-en.js"></script>
-  <script src="/utils/schema-loader.js"></script>
+  <script src="https://unpkg.com/amis@6.7.0/sdk/sdk.js"></script>
+  <script src="https://unpkg.com/amis@6.7.0/sdk/charts.js"></script>
+  <script src="https://unpkg.com/amis@6.7.0/sdk/rest.js"></script>
   <script>
-    (function () {
-      var API_BASE = '/';
+  // Simple schema loader with in-memory cache
+  function SchemaLoader(base) {
+    this.base = base.replace(/\/$/, '');
+    this.cache = {};
+  }
+  SchemaLoader.prototype.load = function (path) {
+    var url = this.base + '/' + path.replace(/^\//, '');
+    if (this.cache[url]) return Promise.resolve(this.cache[url]);
+    var self = this;
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (schema) {
+      self.cache[url] = schema;
+      return schema;
+    });
+  };
+  </script>
+  <script>
+  (function () {
+    /* ── Config ─────────────────────────────────────────────────── */
+    var SCHEMA_BASE = '/schemas/pages/';
+    var DEFAULT_ROUTE = 'dashboard';
 
-      var amis = amisRequire('amis/embed');
-      var loader = new SchemaLoader('/schemas/');
-      var currentInstance = null;
+    /* ── Navigation tree ────────────────────────────────────────── */
+    var NAV = [
+      { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-line', hash: 'dashboard' },
+      { group: 'Finance' },
+      { id: 'accounts',       label: 'Chart of Accounts', icon: 'fa-book',         hash: 'finance/accounts',       module: 'Finance' },
+      { id: 'journal',        label: 'Journal Entries',   icon: 'fa-file-invoice', hash: 'finance/journal-entries', module: 'Finance' },
+      { id: 'fiscal-years',   label: 'Fiscal Years',      icon: 'fa-calendar-alt', hash: 'finance/fiscal-years',    module: 'Finance' },
+      { group: 'Inventory' },
+      { id: 'items',         label: 'Items',         icon: 'fa-box',        hash: 'inventory/items',         module: 'Inventory' },
+      { id: 'warehouses',    label: 'Warehouses',    icon: 'fa-warehouse',  hash: 'inventory/warehouses',    module: 'Inventory' },
+      { id: 'stock-entries', label: 'Stock Entries', icon: 'fa-right-left', hash: 'inventory/stock-entries', module: 'Inventory' },
+      { group: 'Human Resources' },
+      { id: 'employees',      label: 'Employees',      icon: 'fa-users',       hash: 'hr/employees',       module: 'HR' },
+      { id: 'leave-requests', label: 'Leave Requests', icon: 'fa-calendar-xmark', hash: 'hr/leave-requests', module: 'HR' },
+      { id: 'payroll',        label: 'Payroll Runs',   icon: 'fa-money-check', hash: 'hr/payroll-runs',    module: 'HR' },
+      { group: 'CRM' },
+      { id: 'customers',    label: 'Customers',    icon: 'fa-building',  hash: 'crm/customers', module: 'CRM' },
+      { id: 'contacts',     label: 'Contacts',     icon: 'fa-address-book', hash: 'crm/contacts', module: 'CRM' },
+      { id: 'leads',        label: 'Leads',        icon: 'fa-bullseye',  hash: 'crm/leads',     module: 'CRM' },
+      { id: 'opportunities',label: 'Opportunities',icon: 'fa-handshake', hash: 'crm/opportunities', module: 'CRM' },
+      { group: 'Forecourt' },
+      { id: 'sites',       label: 'Sites',         icon: 'fa-gas-pump',    hash: 'forecourt/sites',  module: 'Forecourt' },
+      { id: 'tanks',       label: 'Tanks',         icon: 'fa-database',    hash: 'forecourt/tanks',  module: 'Forecourt' },
+      { id: 'shift-close', label: 'Shift Close',   icon: 'fa-clock',       hash: 'forecourt/shifts', module: 'Forecourt' },
+      { group: 'Platform' },
+      { id: 'iam-users',   label: 'Users',    icon: 'fa-user-gear', hash: 'platform/users',   module: 'Platform' },
+      { id: 'iam-roles',   label: 'Roles',    icon: 'fa-shield',    hash: 'platform/roles',   module: 'Platform' },
+      { id: 'tenants',     label: 'Tenants',  icon: 'fa-building-columns', hash: 'platform/tenants', module: 'Platform' },
+    ];
 
+    /* ── Render nav ─────────────────────────────────────────────── */
+    var menu = document.getElementById('sidebarMenu');
+    NAV.forEach(function (n) {
+      if (n.group) {
+        var el = document.createElement('div');
+        el.className = 'nav-group-label';
+        el.textContent = n.group;
+        menu.appendChild(el);
+        return;
+      }
+      var a = document.createElement('a');
+      a.className = 'nav-item';
+      a.id = 'nav-' + n.id;
+      a.href = '#' + n.hash;
+      a.innerHTML = '<i class="fa ' + n.icon + '"></i><span>' + n.label + '</span>';
+      a.addEventListener('click', function () { closeMobile(); });
+      menu.appendChild(a);
+    });
 
-      // TODO: nake it dynamic ── Menu Structure ──
-      var menuConfig = [
-        {
-          type: 'item',
-          id: 'dashboard',
-          label: 'Dashboard',
-          icon: 'fa-chart-line',
-          hash: '#dashboard'
-        },
-        {
-          type: 'group',
-          id: 'basic-info',
-          label: 'Basic Information',
-          icon: 'fa-briefcase',
-          expanded: false,
-          items: [
-            {id: 'users', label: 'Users', hash: '#users'},
-            {id: 'table', label: 'Table', hash: '#table'},
-            {id: 'organizations', label: 'Tenants', hash: '#organizations'},
-            {id: 'settings', label: 'Settings', hash: '#settings'}
-          ]
-        },
-        {
-          type: 'group',
-          id: 'inventory',
-          label: 'Inventory',
-          icon: 'fa-warehouse',
-          expanded: false,
-          items: [
-            {id: 'products', label: 'Products', hash: '#products'}
-          ]
+    /* ── Theme ──────────────────────────────────────────────────── */
+    var themes = ['system', 'light', 'dark'];
+    var themeIdx = themes.indexOf(localStorage.getItem('awo-theme') || 'system');
+    function applyTheme() {
+      var t = themes[themeIdx];
+      document.documentElement.setAttribute('data-theme', t);
+      document.getElementById('themeLabel').textContent = t.charAt(0).toUpperCase() + t.slice(1);
+      localStorage.setItem('awo-theme', t);
+    }
+    window.cycleTheme = function () { themeIdx = (themeIdx + 1) % themes.length; applyTheme(); };
+    applyTheme();
+
+    /* ── Sidebar collapse ────────────────────────────────────────── */
+    var sidebar = document.getElementById('sidebar');
+    var sidebarCollapsed = localStorage.getItem('awo-sidebar') === 'collapsed';
+    if (sidebarCollapsed) sidebar.classList.add('collapsed');
+    window.toggleSidebar = function () {
+      sidebarCollapsed = !sidebarCollapsed;
+      sidebar.classList.toggle('collapsed', sidebarCollapsed);
+      localStorage.setItem('awo-sidebar', sidebarCollapsed ? 'collapsed' : '');
+    };
+    var backdrop = document.getElementById('sidebar-backdrop');
+    window.openMobile = function () { sidebar.classList.add('mobile-open'); backdrop.classList.add('visible'); };
+    window.closeMobile = function () { sidebar.classList.remove('mobile-open'); backdrop.classList.remove('visible'); };
+
+    /* ── AMIS setup ─────────────────────────────────────────────── */
+    var amis = amisRequire('amis/embed');
+    var loader = new SchemaLoader(SCHEMA_BASE);
+    var currentInstance = null;
+
+    var amisEnv = {
+      locale: 'en-US',
+      fetcher: function (api) {
+        var url = api.url || '';
+        var method = (api.method || 'get').toLowerCase();
+
+        // Convert AMIS page/perPage (or $page/$perPage) → offset/limit for our backend
+        var urlObj = new URL(url, window.location.origin);
+        var page = urlObj.searchParams.get('page') || urlObj.searchParams.get('$page');
+        var perPage = urlObj.searchParams.get('perPage') || urlObj.searchParams.get('$perPage');
+        if (page !== null) {
+          var limit = perPage ? parseInt(perPage, 10) : 20;
+          var offset = (parseInt(page, 10) - 1) * limit;
+          urlObj.searchParams.delete('page');
+          urlObj.searchParams.delete('$page');
+          urlObj.searchParams.set('offset', String(offset));
         }
-      ];
+        if (perPage !== null) {
+          urlObj.searchParams.delete('perPage');
+          urlObj.searchParams.delete('$perPage');
+          urlObj.searchParams.set('limit', perPage);
+        }
+        url = urlObj.toString();
 
-      // ── AMIS Environment ──
-      var amisEnv = {
-        locale: 'en-US',
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, api.headers || {});
+        var opts = { method: method, headers: headers, credentials: 'include' };
+        if (method !== 'get' && method !== 'head' && api.data) {
+          opts.body = JSON.stringify(api.data);
+        }
 
-        fetcher: function (api) {
-          var url = api.url;
-          if (url && !/^https?:\/\//.test(url)) {
-            // Strip leading slash to avoid double-slash with API_BASE
-            url = API_BASE + url.replace(/^\//, '');
-          }
-
-          // Convert AMIS pagination (page/perPage) to backend (offset/limit)
-          var urlObj = new URL(url, window.location.origin);
-          var page = urlObj.searchParams.get('page');
-          var perPage = urlObj.searchParams.get('perPage');
-          if (page !== null) {
-            var limit = perPage ? parseInt(perPage) : 20;
-            urlObj.searchParams.delete('page');
-            urlObj.searchParams.set('offset', String((parseInt(page) - 1) * limit));
-          }
-          if (perPage !== null) {
-            urlObj.searchParams.delete('perPage');
-            urlObj.searchParams.set('limit', perPage);
-          }
-          url = urlObj.toString();
-
-          var method = (api.method || 'get').toLowerCase();
-          var headers = Object.assign({'Content-Type': 'application/json'}, api.headers || {});
-          var opts = {method: method, headers: headers};
-
-          if (method !== 'get' && method !== 'head' && api.data) {
-            opts.body = JSON.stringify(api.data);
-          }
-
-          return fetch(url, opts)
-            .then(function (res) {
-              // 204 No Content (DELETE success) — no body to parse
-              if (res.status === 204) {
-                return {status: 0, msg: ''};
+        return fetch(url, opts)
+          .then(function (res) {
+            if (res.status === 204) return { status: 0, msg: '' };
+            return res.json().then(function (body) {
+              // Our backend already returns {status, msg, data} — pass through.
+              // For non-2xx that don't have status field, normalise.
+              if (body.status === undefined) {
+                if (!res.ok) return { status: res.status, msg: body.error || body.msg || res.statusText };
+                return { status: 0, msg: '', data: body };
               }
-              if (!res.ok) {
-                // Try to parse error body for backend message
-                return res.json().catch(function () { return {}; }).then(function (body) {
-                  var msg = body.message || body.msg || res.statusText || 'Request failed';
-                  console.error('[fetcher] HTTP', res.status, msg, url);
-                  return {status: res.status, msg: msg};
-                });
-              }
-              return res.json();
-            })
-            .then(function (json) {
-              // Already an AMIS response (from error handling above or passthrough)
-              if (json.status !== undefined && json.success === undefined) {
-                return json;
-              }
-              // Backend envelope: {success, data, meta}
-              if (json.success !== undefined) {
-                if (!json.success) {
-                  return {status: 1, msg: json.message || 'Request failed'};
-                }
-                // List response with pagination
-                if (Array.isArray(json.data) && json.meta && json.meta.pagination) {
-                  return {
-                    status: 0,
-                    data: {
-                      items: json.data,
-                      options: json.data,
-                      count: json.meta.pagination.total_records
-                    }
-                  };
-                }
-                // Single item or action response
-                return {status: 0, data: json.data, msg: ''};
-              }
-              return json;
-            })
-            .catch(function (err) {
-              console.error('[fetcher] Network error:', err.message, '| URL:', url);
-              return {status: 1, msg: 'Network error: ' + err.message};
+              return body;
             });
-        },
-        isCancel: function () {return false;},
-        notify: function (type, msg) {
-          console.log('[' + type + ']', msg);
-        },
-        alert: function (msg) {
-          alert(msg);
-        },
-        copy: function (text) {
-          if (navigator.clipboard) navigator.clipboard.writeText(text);
-        }
-      };
+          })
+          .catch(function (err) {
+            return { status: 1, msg: 'Network error: ' + err.message };
+          });
+      },
+      isCancel: function () { return false; },
+      notify: function (type, msg) {
+        console.log('[amis:' + type + ']', msg);
+      },
+      alert: window.alert.bind(window),
+      copy: function (text) {
+        if (navigator.clipboard) navigator.clipboard.writeText(text);
+      }
+    };
 
+    /* ── Active nav ──────────────────────────────────────────────── */
+    function setActive(hash) {
+      document.querySelectorAll('.nav-item').forEach(function (el) {
+        el.classList.remove('active');
+      });
+      var node = NAV.find(function (n) { return n.hash === hash; });
+      if (node) {
+        var el = document.getElementById('nav-' + node.id);
+        if (el) el.classList.add('active');
+        // Breadcrumb
+        document.getElementById('bc-page').textContent = node.label;
+        if (node.module) {
+          document.getElementById('bc-module').textContent = node.module;
+          document.getElementById('bc-sep').style.display = '';
+        } else {
+          document.getElementById('bc-module').textContent = '';
+          document.getElementById('bc-sep').style.display = 'none';
+        }
+      }
+    }
+
+    /* ── Session (whoami) ────────────────────────────────────────── */
+    function loadSession() {
+      fetch('/auth/me', { credentials: 'include' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (body) {
+          if (body && body.data && body.data.display_name) {
+            document.getElementById('userName').textContent = body.data.display_name;
+          }
+        })
+        .catch(function () {});
+    }
+    loadSession();
+
+    /* ── Router ──────────────────────────────────────────────────── */
+    var content = document.getElementById('content');
+
+    function navigate() {
+      var hash = window.location.hash.slice(1) || DEFAULT_ROUTE;
+      setActive(hash);
+
+      if (currentInstance) {
+        try { currentInstance.unmount(); } catch (e) {}
+        currentInstance = null;
+      }
+      content.innerHTML = '<div class="page-loading"><i class="fa fa-spinner fa-spin"></i> Loading...</div>';
+
+      loader.load(hash + '.json')
+        .then(function (schema) {
+          content.innerHTML = '';
+          currentInstance = amis.embed('#content', schema, { locale: 'en-US' }, amisEnv);
+        })
+        .catch(function (err) {
+          content.innerHTML = '<div class="page-error"><h3>Page not found</h3><p>' +
+            hash + '.json — ' + err.message + '</p></div>';
+        });
+    }
+
+    window.addEventListener('hashchange', navigate);
+    navigate();
+  })();
   </script>
 </body>
-
 </html>

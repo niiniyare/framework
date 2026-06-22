@@ -22,11 +22,13 @@ import (
 	"awo.so/framework/internal/middleware"
 	internalPerms "awo.so/framework/internal/permissions"
 	internalredis "awo.so/framework/internal/redis"
+	"awo.so/framework/internal/sdui"
 	"awo.so/framework/internal/server"
 	"awo.so/framework/internal/settings"
 	"awo.so/framework/internal/store"
 	"awo.so/framework/internal/store/tenantpool"
 	"awo.so/framework/internal/tenant"
+	"awo.so/framework/internal/workflow"
 	"awo.so/framework/modules/crm"
 	"awo.so/framework/modules/finance"
 	"awo.so/framework/modules/forecourt"
@@ -38,11 +40,14 @@ import (
 
 func serveCmd() *cobra.Command {
 	var (
-		port      int
-		dbURL     string
-		redisAddr string
-		apiOnly   bool
-		workerOnly bool
+		port         int
+		dbURL        string
+		redisAddr    string
+		temporalAddr string
+		webDir       string
+		apiOnly      bool
+		workerOnly   bool
+		noUI         bool
 	)
 
 	cmd := &cobra.Command{
@@ -94,14 +99,15 @@ func serveCmd() *cobra.Command {
 				tenantResolver middleware.TenantResolver = &noopTenantResolver{}
 				sessionStore   middleware.SessionStore   = &noopSessionStore{}
 				authDeps       *server.AuthDeps
+				authzSvc       *authz.Service
 			)
 
 			if db != nil && redisClient != nil {
-				authzSvc, err := authz.New(db, log, 5*time.Minute)
+				var err error
+				authzSvc, err = authz.New(db, log, 5*time.Minute)
 				if err != nil {
 					return err
 				}
-				_ = authzSvc
 
 				auditSvc := audit.New(db, log)
 				_ = auditSvc
@@ -147,22 +153,76 @@ func serveCmd() *cobra.Command {
 				repoFor = poolMgr.RepoFor(ctx)
 			}
 
+			// ── Temporal dispatcher (best-effort) ────────────────────────────
+			var dispatcher *workflow.Dispatcher
+			if !apiOnly {
+				if temporalAddr == "" {
+					temporalAddr = os.Getenv("TEMPORAL_HOST_PORT")
+				}
+				if temporalAddr == "" {
+					temporalAddr = workflow.DefaultConfig().HostPort
+				}
+				if wfClient, err := workflow.New(workflow.Config{
+					HostPort:  temporalAddr,
+					Namespace: "default",
+				}); err != nil {
+					log.Warn("Temporal unavailable — workflow dispatch disabled", slog.Any("err", err))
+				} else {
+					defer wfClient.Close()
+					dispatcher = workflow.NewDispatcher(wfClient, log)
+					log.Info("temporal connected", slog.String("addr", temporalAddr))
+				}
+			}
+
+			// ── SDUI cached page builder ──────────────────────────────────────
+			var pageBuilder *sdui.CachedBuilder
+			if redisClient != nil {
+				pageBuilder = sdui.NewCachedBuilder(redisClient)
+			}
+
 			deps := &server.Deps{
 				SystemRegistry: systemRegistry,
 				TenantRegistry: tenantReg,
 				HookExecutor:   internalHooks.New(),
 				Evaluator:      internalPerms.New(),
+				Authz:          authzSvc,
+				Dispatcher:     dispatcher,
+				PageBuilder:    pageBuilder,
 				RepoFor:        repoFor,
 				Log:            log,
 			}
 
 			cfg := server.DefaultConfig()
 			cfg.Port = port
+			if noUI {
+				cfg.WebDir = ""
+			} else {
+				if webDir != "" {
+					cfg.WebDir = webDir
+				}
+				// Dev fallback: if dist/index.html doesn't exist but web/ source does,
+				// serve index.html from web/ and public assets from web/public/.
+				if _, err := os.Stat(cfg.WebDir + "/index.html"); os.IsNotExist(err) {
+					if _, srcErr := os.Stat("./web/index.html"); srcErr == nil {
+						cfg.WebDir = "./web"
+						cfg.WebPublicDir = "./web/public"
+						log.Info("web/dist not built — serving from web/ source (dev mode)")
+					}
+				}
+			}
 
 			app := server.New(cfg, deps, tenantResolver, sessionStore, log)
 
 			if authDeps != nil {
 				server.MountAuthRoutes(app, authDeps)
+			}
+
+			if authzSvc != nil && db != nil {
+				server.MountIAMRoutes(app, &server.IAMDeps{
+					Authz: authzSvc,
+					DB:    db,
+					Log:   log,
+				})
 			}
 
 			// ── Run ───────────────────────────────────────────────────────────
@@ -186,6 +246,9 @@ func serveCmd() *cobra.Command {
 	cmd.Flags().IntVar(&port, "port", 8080, "Port to listen on")
 	cmd.Flags().StringVar(&dbURL, "db", "", "PostgreSQL connection URL (overrides DATABASE_URL)")
 	cmd.Flags().StringVar(&redisAddr, "redis", "", "Redis address (overrides REDIS_URL)")
+	cmd.Flags().StringVar(&temporalAddr, "temporal", "", "Temporal host:port (overrides TEMPORAL_HOST_PORT)")
+	cmd.Flags().StringVar(&webDir, "web-dir", "", "Path to built web assets (default: ./web/dist)")
+	cmd.Flags().BoolVar(&noUI, "no-ui", false, "Disable static web UI serving (API only)")
 	cmd.Flags().BoolVar(&apiOnly, "api-only", false, "Start Fiber only (no Temporal worker)")
 	cmd.Flags().BoolVar(&workerOnly, "worker-only", false, "Start Temporal worker only (no Fiber)")
 
