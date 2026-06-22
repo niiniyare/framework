@@ -53,9 +53,14 @@ type Service struct {
 }
 
 // New creates a session Service.
+// flags may be nil initially — call SetFlags before serving traffic.
 func New(db *pgxpool.Pool, r *redis.Client, flags FlagResolver, settings SettingResolver, log *slog.Logger) *Service {
 	return &Service{db: db, redis: r, flags: flags, settings: settings, log: log}
 }
+
+// SetFlags wires the flag resolver after both services are constructed.
+// Must be called before the first Login call.
+func (s *Service) SetFlags(flags FlagResolver) { s.flags = flags }
 
 // Create builds and persists a new session for the given user.
 // Returns the ResolvedSession and the raw (un-hashed) token.
@@ -67,9 +72,15 @@ func (s *Service) Create(ctx context.Context, p CreateParams) (*domain.ResolvedS
 	}
 
 	// Resolve tenant flags and settings for embedding in session
-	flags, err := s.flags.ResolveForTenant(ctx, p.User.TenantID)
-	if err != nil {
-		s.log.Warn("session: resolve flags failed, continuing with empty", slog.Any("err", err))
+	var flags map[string]bool
+	if s.flags != nil {
+		if f, err := s.flags.ResolveForTenant(ctx, p.User.TenantID); err != nil {
+			s.log.Warn("session: resolve flags failed, continuing with empty", slog.Any("err", err))
+			flags = map[string]bool{}
+		} else {
+			flags = f
+		}
+	} else {
 		flags = map[string]bool{}
 	}
 	settings, err := s.settings.ResolveForTenant(ctx, p.User.TenantID)
