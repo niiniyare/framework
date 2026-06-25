@@ -200,6 +200,57 @@
       flex-shrink: 0;
     }
 
+    /* ── Login overlay ───────────────────────────────────────────────── */
+    #login-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #login-overlay.hidden { display: none; }
+
+    .login-card {
+      background: #fff; border-radius: 16px; padding: 40px;
+      width: 100%; max-width: 400px; box-shadow: 0 25px 50px rgba(0,0,0,.4);
+    }
+    .login-logo {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 32px;
+    }
+    .login-logo-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: var(--brand); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 20px;
+    }
+    .login-logo-text { font-size: 20px; font-weight: 700; color: #0f172a; }
+    .login-logo-sub { font-size: 12px; color: #94a3b8; }
+
+    .login-field { margin-bottom: 18px; }
+    .login-field label {
+      display: block; font-size: 13px; font-weight: 500;
+      color: #374151; margin-bottom: 6px;
+    }
+    .login-field input {
+      width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
+      border-radius: 8px; font-size: 14px; outline: none;
+      transition: border-color .15s;
+    }
+    .login-field input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(30,64,175,.1); }
+
+    .login-btn {
+      width: 100%; padding: 11px; background: var(--brand); color: #fff;
+      border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+    }
+    .login-btn:hover { background: var(--brand-dark); }
+    .login-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    .login-error {
+      margin-top: 14px; padding: 10px 12px; border-radius: 8px;
+      background: #fef2f2; color: #b91c1c; font-size: 13px;
+      display: none;
+    }
+    .login-error.visible { display: block; }
+
     /* ── Mobile ──────────────────────────────────────────────────────── */
     #sidebar-backdrop {
       display: none; position: fixed; inset: 0;
@@ -223,6 +274,35 @@
 </head>
 
 <body>
+  <!-- Login overlay — shown until session confirmed -->
+  <div id="login-overlay">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-logo-icon">A</div>
+        <div>
+          <div class="login-logo-text">AWO ERP</div>
+          <div class="login-logo-sub">Sign in to your workspace</div>
+        </div>
+      </div>
+      <form id="login-form" onsubmit="submitLogin(event)">
+        <div class="login-field">
+          <label for="login-tenant">Workspace</label>
+          <input id="login-tenant" type="text" placeholder="your-workspace" autocomplete="organization" required>
+        </div>
+        <div class="login-field">
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" placeholder="you@example.com" autocomplete="email" required>
+        </div>
+        <div class="login-field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" placeholder="••••••••" autocomplete="current-password" required>
+        </div>
+        <button class="login-btn" type="submit" id="login-submit">Sign in</button>
+        <div class="login-error" id="login-error"></div>
+      </form>
+    </div>
+  </div>
+
   <div id="app">
     <aside id="sidebar">
       <div class="sidebar-brand">
@@ -256,6 +336,9 @@
           <button class="theme-btn" onclick="cycleTheme()">
             <i class="fa fa-circle-half-stroke" id="themeIcon"></i>
             <span id="themeLabel">System</span>
+          </button>
+          <button class="theme-btn" onclick="doLogout()" title="Sign out">
+            <i class="fa fa-arrow-right-from-bracket"></i>
           </button>
         </div>
       </div>
@@ -399,7 +482,7 @@
         }
         url = urlObj.toString();
 
-        var headers = Object.assign({ 'Content-Type': 'application/json' }, api.headers || {});
+        var headers = Object.assign({ 'Content-Type': 'application/json', 'X-Awo-Tenant': currentTenant }, api.headers || {});
         var opts = { method: method, headers: headers, credentials: 'include' };
         if (method !== 'get' && method !== 'head' && api.data) {
           opts.body = JSON.stringify(api.data);
@@ -407,6 +490,7 @@
 
         return fetch(url, opts)
           .then(function (res) {
+            if (res.status === 401) { showLogin('Session expired — please sign in again.'); return { status: 401, msg: 'Unauthorized' }; }
             if (res.status === 204) return { status: 0, msg: '' };
             return res.json().then(function (body) {
               // Our backend already returns {status, msg, data} — pass through.
@@ -453,18 +537,95 @@
       }
     }
 
-    /* ── Session (whoami) ────────────────────────────────────────── */
-    function loadSession() {
-      fetch('/auth/me', { credentials: 'include' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (body) {
-          if (body && body.data && body.data.display_name) {
-            document.getElementById('userName').textContent = body.data.display_name;
-          }
-        })
-        .catch(function () {});
+    /* ── Auth gate ───────────────────────────────────────────────── */
+    var currentTenant = localStorage.getItem('awo-tenant') || '';
+
+    function showLogin(msg) {
+      document.getElementById('login-overlay').classList.remove('hidden');
+      if (currentTenant) document.getElementById('login-tenant').value = currentTenant;
+      if (msg) {
+        var el = document.getElementById('login-error');
+        el.textContent = msg;
+        el.classList.add('visible');
+      }
     }
-    loadSession();
+
+    function hideLogin() {
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('login-error').classList.remove('visible');
+    }
+
+    window.submitLogin = function (e) {
+      e.preventDefault();
+      var tenant = document.getElementById('login-tenant').value.trim();
+      var email  = document.getElementById('login-email').value.trim();
+      var pass   = document.getElementById('login-password').value;
+      var btn    = document.getElementById('login-submit');
+      var errEl  = document.getElementById('login-error');
+
+      btn.disabled = true;
+      btn.textContent = 'Signing in…';
+      errEl.classList.remove('visible');
+
+      fetch('/auth/login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', 'X-Awo-Tenant': tenant },
+        body: JSON.stringify({ email: email, password: pass })
+      })
+      .then(function (r) { return r.json(); })
+      .then(function (body) {
+        if (body.status === 0 && !body.data.mfa_required) {
+          currentTenant = tenant;
+          localStorage.setItem('awo-tenant', tenant);
+          document.getElementById('userName').textContent = body.data.display_name || email;
+          hideLogin();
+          navigate();
+        } else if (body.data && body.data.mfa_required) {
+          errEl.textContent = 'MFA not yet supported in this build.';
+          errEl.classList.add('visible');
+        } else {
+          errEl.textContent = body.msg || body.error || 'Login failed';
+          errEl.classList.add('visible');
+        }
+      })
+      .catch(function (err) {
+        errEl.textContent = 'Network error: ' + err.message;
+        errEl.classList.add('visible');
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.textContent = 'Sign in';
+      });
+    };
+
+    window.doLogout = function () {
+      fetch('/auth/logout', {
+        method: 'POST', credentials: 'include',
+        headers: { 'X-Awo-Tenant': currentTenant }
+      }).finally(function () { showLogin(); });
+    };
+
+    function checkSession() {
+      if (!currentTenant) { showLogin(); return; }
+      fetch('/auth/me', {
+        credentials: 'include',
+        headers: { 'X-Awo-Tenant': currentTenant }
+      })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (body) {
+        if (body && body.status === 0 && body.data) {
+          document.getElementById('userName').textContent = body.data.display_name || body.data.user_id;
+          hideLogin();
+          navigate();
+        } else {
+          showLogin();
+        }
+      })
+      .catch(function () { showLogin(); });
+    }
+
+    checkSession();
 
     /* ── Router ──────────────────────────────────────────────────── */
     var content = document.getElementById('content');
@@ -490,8 +651,12 @@
         });
     }
 
-    window.addEventListener('hashchange', navigate);
-    navigate();
+    window.addEventListener('hashchange', function () {
+      // Only navigate when authenticated
+      if (document.getElementById('login-overlay').classList.contains('hidden')) {
+        navigate();
+      }
+    });
   })();
   </script>
 </body>

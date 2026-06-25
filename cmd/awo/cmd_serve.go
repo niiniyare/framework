@@ -110,7 +110,6 @@ func serveCmd() *cobra.Command {
 				}
 
 				auditSvc := audit.New(db, log)
-				_ = auditSvc
 
 				settingsSvc := settings.New(db, redisClient, log)
 
@@ -121,17 +120,28 @@ func serveCmd() *cobra.Command {
 
 				authSvc := iamauth.New(db, sessionSvc, log)
 				apiKeySvc := apikey.New(db, redisClient, flagsSvc, settingsSvc, log)
+				lifecycleSvc := tenant.NewLifecycle(db, authzSvc, auditSvc, log)
 
 				tenantResolver = tenant.NewDBResolver(db)
 				sessionStore = &resolvedSessionBridge{sessions: sessionSvc}
 
 				authDeps = &server.AuthDeps{
-					Auth:    authSvc,
-					APIKeys: apiKeySvc,
-					Log:     log,
+					Auth:      authSvc,
+					APIKeys:   apiKeySvc,
+					Lifecycle: lifecycleSvc,
+					Log:       log,
 				}
+			} else if db != nil {
+				// DB available but Redis not — wire registration-only (no sessions/flags).
+				auditSvc := audit.New(db, log)
+				lifecycleSvc := tenant.NewLifecycle(db, nil, auditSvc, log)
+				authDeps = &server.AuthDeps{
+					Lifecycle: lifecycleSvc,
+					Log:       log,
+				}
+				log.Warn("IAM services limited (Redis not available) — login/session disabled, registration only")
 			} else {
-				log.Warn("IAM services disabled (DB or Redis not available)")
+				log.Warn("IAM services disabled (DB not available)")
 			}
 
 			// ── Entity registry ───────────────────────────────────────────────

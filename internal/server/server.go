@@ -51,10 +51,24 @@ func New(cfg Config, deps *Deps, tenantResolver middleware.TenantResolver, sessi
 	app.Use(cors.New(cors.Config{AllowOrigins: cfg.AllowOrigins}))
 
 	// Tenant + Auth middleware only applies to API surface.
-	// Static file paths (/schemas/, /, etc.) must reach the static handler.
+	// /auth/register is public (no tenant exists yet during signup).
+	tenantMW := middleware.Tenant(tenantResolver)
+	authMW := middleware.Auth(sessions)
+	exempt := func(c *fiber.Ctx) bool { return c.Path() == "/auth/register" }
 	for _, prefix := range []string{"/api", "/iam", "/auth"} {
-		app.Use(prefix, middleware.Tenant(tenantResolver))
-		app.Use(prefix, middleware.Auth(sessions))
+		p := prefix
+		app.Use(p, func(c *fiber.Ctx) error {
+			if exempt(c) {
+				return c.Next()
+			}
+			return tenantMW(c)
+		})
+		app.Use(p, func(c *fiber.Ctx) error {
+			if exempt(c) {
+				return c.Next()
+			}
+			return authMW(c)
+		})
 	}
 
 	RegisterRoutes(app, deps)
